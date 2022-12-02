@@ -1,0 +1,193 @@
+#다른 MLP 라이브러리를 사용하지 않고 글자인식 MLP 구현하기
+
+#패키지 설치
+import numpy as np
+import random
+
+#학습할 데이터
+s1 = np.array([1,1,1,0,0,1,0,0,1]) #ㄱ
+s2 = np.array([1,0,0,1,0,0,1,1,1]) #ㄴ
+s3 = np.array([1,1,1,1,0,0,1,1,1]) #ㄷ
+c1 = np.array([1,0,0])
+c2 = np.array([0,1,0])
+c3 = np.array([0,0,1])
+
+#초기 설정 값
+eta = 0.025              #에타값
+input_node = 9             #입력층 노드 갯수
+hidden_node = 6            #은닉층 노드 갯수
+output_node = 3            #출력층 노드 갯수
+sub = result = count = 0   #식에 사용할 변수들
+offset = 1                 #시그모이드 함수의 조정값
+epoch_weight=0             #가중치 변동 확인 배열의 초기 값
+epoch_det = 0.000005           #가중치 최소 변동값
+max_num=5000                # max_num의 10000배수 값을 최대 epoch로 설정
+total = e = 0
+
+#초기 가중치 및 출력값 임시 저장용 배열
+w1=np.zeros((input_node,hidden_node),dtype=np.float64)   #입력>은닉 간 가중치
+w2=np.zeros((hidden_node,output_node),dtype=np.float64)  #은닉>출력 간 가중치
+w3=np.zeros((hidden_node,output_node),dtype=np.float64)  #가중치 조정이 끝났는지 판단을 위한 비교용 가중치 
+bias_o=np.zeros(output_node,dtype=np.float64)            #출력층 바이어스
+bias_h=np.zeros(hidden_node,dtype=np.float64)            #은닉층 바이어스
+
+for i in range(0,input_node):                            #입력>은닉 간 초기 가중치
+    for j in range(0,hidden_node):
+        w1[i][j]=random.random()
+        w1[i][j]=w1[i][j]/5
+        w1[i][j]=round(w1[i][j],8)
+for i in range(0,hidden_node):                           #은닉>출력 간 초기 가중치와 가중치 변동 값 비교용 배열
+    for j in range(0,output_node):
+        w2[i][j]=random.random()
+        w2[i][j]=w2[i][j]/5
+        w2[i][j]=round(w2[i][j],8)
+        w3[i][j]=epoch_weight
+
+for i in range(0,output_node):                           #출력층 바이어스 값 초기화
+    bias_o[i]=random.uniform(-1,1)
+    bias_o[i]=bias_o[i]/5
+    bias_o[i]=round(bias_o[i],8)
+    
+for i in range(0,hidden_node):                           #은닉층 바이어스 값 초기화
+    bias_h[i]=random.uniform(-1,1)
+    bias_h[i]=bias_h[i]/5
+    bias_h[i]=round(bias_h[i],8)
+         
+hidden=np.zeros(hidden_node,dtype=np.float64)             #입력>은닉 출력값 저장
+
+output=np.zeros(output_node,dtype=np.float64)             #은닉>출력 출력값 저장
+
+del_out=np.zeros(output_node,dtype=np.float64)            #출력층 오차계산
+
+del_hid=np.zeros(hidden_node,dtype=np.float64)            #은닉층 오차계산
+
+#시그모이드 함수
+def sigmoid_f(x):
+    x=(1/(1+np.exp(-(x-offset))))
+#    x=round(x,3)
+    return x
+
+#계산 함수 모음
+def in_hid(s,w):                         #input -> hidden
+    for i in range(0,hidden_node):
+        sub=0
+        for j in range(0,input_node):
+            sub=sub+s[j]*w[j][i]
+        hidden[i] = sigmoid_f(sub+bias_h[i])
+        
+
+def hid_out(h,w):                        #hidden -> output
+    for i in range(0,output_node):
+        sub=0
+        for j in range(0,hidden_node):
+            sub=sub+h[j]*w[j][i]
+        output[i]=sigmoid_f(sub+bias_o[i])
+        
+        
+def diff_out(c,out):                     #output_delta
+        for j in range(0,output_node):
+            del_out[j] = out[j]*(1-out[j])*(c[j]-out[j])
+            
+            
+            
+
+def diff_hid(h,delta,w):                 #hidden_delta
+    for i in range(0,hidden_node):
+        sub=0
+        for j in range(0,output_node):
+            sub=sub+(w[i][j]*delta[j])
+        del_hid[i]=h[i]*sub*(1-h[i])
+        
+        
+        
+
+def fix_w2(w,del_out,h):                 #output_weight
+    for i in range(0,hidden_node):
+        for j in range(0,output_node):
+            w[i][j]=w[i][j]+eta*del_out[j]*h[i]
+            
+            
+
+def fix_w1(w,del_hid,s):                 #hidden_weight
+    for i in range(0,input_node):
+        for j in range(0,hidden_node):
+            w[i][j]=w[i][j]+eta*del_hid[j]*s[i]
+            w[i][j]=round(w[i][j],8)
+
+def _error(w1,w2,epoch):                 #가중치 변동 값
+    result = 0
+    err=np.zeros((hidden_node,output_node),dtype=np.float64)
+    for i in range(0,hidden_node):
+        for j in range(0,output_node):
+            err[i][j] = w2[i][j]-w1[i][j]
+            err[i][j] = np.abs(err[i][j])
+            result=result+err[i][j]
+    result=result/(hidden_node*output_node)
+    print(result)
+    if (result<epoch):
+        return 1
+    else:
+        return 0
+            
+def det_epoch(s1,c1,s2,c2,s3,c3,count,total,max_num,w):  #학습
+    global e
+    total=0
+    while (e==0):
+        study(s1,c1)
+        study(s2,c2)
+        study(s3,c3)
+        count=count+1
+        if(count%2==0):
+            if(_error(w,w2,epoch_det)==1):
+                print("학습 완료")
+                print(count,"번")
+                e=1
+            total=total=1
+        if(count%2==1):
+            for i in range(0,hidden_node):
+                for j in range(0,output_node):
+                    w[i][j]=w2[i][j]
+        
+        if(total==max_num):
+            print("메모리 오버 현상 방지 자동 종료")
+            print(w1,"\n",w2)
+            e=1
+    print("종료")
+        
+            
+def study(s,c):                                         #1epoch
+    in_hid(s,w1)
+    hid_out(hidden,w2)
+    diff_out(c,output)
+    diff_hid(hidden,del_out,w2)
+    fix_w2(w2,del_out,hidden)
+    fix_w1(w1,del_hid,s)
+    
+    
+    
+    
+def test(s):                                             #학습 완료된 모델로 테스트하기
+    in_hid(s,w1)
+    hid_out(hidden,w2)
+    if(output[0]>=output[1] and output[0]>=output[2]):
+        print("100")
+    if(output[1]>=output[0] and output[1]>=output[2]):
+        print("010")
+    if(output[2]>=output[0] and output[2]>=output[1]):
+        print("001")
+    print(output)
+
+det_epoch(s1,c1,s2,c2,s3,c3,count,total,max_num,w3) #학습 시행 
+
+#테스트 해보기
+test1 = np.array([1,1,1,0,0,1,0,0,0])
+test2 = np.array([0,0,0,1,0,0,1,1,0])
+test3 = np.array([1,1,0,1,0,0,1,1,0])
+test4 = np.array([1,1,1,0,0,0,0,1,1])
+test5 = np.array([1,0,0,1,0,0,1,0,1])
+
+test(test1)
+test(test2)
+test(test3)
+test(test4)
+test(test5)
